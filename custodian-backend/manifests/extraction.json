@@ -1,0 +1,1 @@
+{"agent": "extraction", "trustTier": "untrusted-input", "allowedActions": ["ExtractInvoice", "RunSandboxOCR"]}

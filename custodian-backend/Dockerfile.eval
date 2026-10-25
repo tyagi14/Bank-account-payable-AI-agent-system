@@ -1,0 +1,13 @@
+# One-shot prompt promotion gate (DeepEval). Shares the agent code (llm, schemas, prompt texts)
+# with the backend but not its runtime-only dependencies (SPIFFE, Presidio, LangGraph).
+FROM python:3.14.9-slim
+WORKDIR /srv
+COPY requirements-eval.txt .
+RUN pip install --no-cache-dir -r requirements-eval.txt && useradd --uid 10001 --create-home app
+COPY app/__init__.py app/llm.py app/schemas.py app/telemetry.py app/
+COPY app/prompt_texts app/prompt_texts
+COPY eval eval
+USER app
+WORKDIR /home/app
+ENV DEEPEVAL_TELEMETRY_OPT_OUT=YES DEEPEVAL_GRPC_LOGGING=NO HOME=/home/app PYTHONPATH=/srv
+ENTRYPOINT ["python", "-m", "eval.promote"]

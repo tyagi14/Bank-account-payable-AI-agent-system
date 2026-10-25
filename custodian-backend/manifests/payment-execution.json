@@ -1,0 +1,1 @@
+{"agent": "payment-execution", "trustTier": "privileged", "allowedActions": ["ExecutePayment", "ledger.write"]}

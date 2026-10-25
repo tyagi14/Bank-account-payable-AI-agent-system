@@ -1,0 +1,16 @@
+{
+  "classificationLevels": {"public": 0, "internal": 1, "RestrictedFinancial": 2},
+  "agents": {
+    "extraction": {"trustTier": "untrusted-input", "clearance": 1},
+    "risk-scoring": {"trustTier": "internal", "clearance": 2},
+    "approval": {"trustTier": "internal", "clearance": 1},
+    "payment-execution": {"trustTier": "privileged", "clearance": 2}
+  },
+  "dataAssets": {
+    "invoice_inbox": {"database": "custodian", "classification": "internal", "description": "Incoming invoice documents (real SROIE/CORD receipts) and their ground-truth fields"},
+    "vendors": {"database": "ledger", "classification": "public", "description": "Vendor master seeded from public USAspending.gov award recipients"},
+    "historical_payments": {"database": "ledger", "classification": "RestrictedFinancial", "description": "Payment history per vendor (USAspending awards plus settled ledger payments)"},
+    "journal_entries": {"database": "ledger", "classification": "RestrictedFinancial", "description": "Double-entry journal headers"},
+    "postings": {"database": "ledger", "classification": "RestrictedFinancial", "description": "Double-entry postings (balances derive from these)"}
+  }
+}

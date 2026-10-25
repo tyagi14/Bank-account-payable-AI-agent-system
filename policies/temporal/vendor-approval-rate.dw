@@ -1,0 +1,25 @@
+// Authoritative spec for the rolling-window approval limit. Cedar is stateless, so this rule is
+// enforced by infra/policy-service/app/temporal.py, which reads the window and limit from this file
+// and evaluates them against the policy_decisions table (Dogwood's reference interpreter is not
+// meant for production authorization).
+//
+// Forbid approving (by agent or human) a vendor that already had 3 approvals in the last 24 hours.
+// Counted over `response` events: an approval that was denied does not consume the budget.
+@id("vendor-approvals-per-24h")
+forbid (
+    principal,
+    action in [Custodian::Action::"AutoApproveInvoice", Custodian::Action::"HumanApproveInvoice"],
+    resource
+)
+when temporal {
+    exists (n: Long). (
+        (count for (t: Timepoint). where (
+            formerly within 24h (
+                (Custodian::Action::"AutoApproveInvoice"::response{ input.vendor: context.input.vendor }
+                 || Custodian::Action::"HumanApproveInvoice"::response{ input.vendor: context.input.vendor })
+                && tp(t)
+            )
+        )) == n
+        && n >= 3
+    )
+};

@@ -1,0 +1,94 @@
+# Model governance: the LLM gateway (routing, per-agent keys, budget caps), the prompt registry,
+# and the one-shot eval/promotion gate.
+name: custodian
+include:
+  - docker-compose.identity.yml
+
+services:
+  litellm:
+    image: ghcr.io/berriai/litellm:v1.106.2
+    restart: unless-stopped
+    entrypoint: ["python", "/app/custodian-entrypoint.py"]
+    environment:
+      INFISICAL_URL: http://infisical:8080
+      INFISICAL_CLIENT_ID: ${LITELLM_CLIENT_ID:?run provision-infisical-identities.py}
+      INFISICAL_CLIENT_SECRET: ${LITELLM_CLIENT_SECRET:?run provision-infisical-identities.py}
+      INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_LLM_PROVIDERS:?run provision-infisical-identities.py}
+      OPENAI_REASONING_MODEL: ${OPENAI_REASONING_MODEL:?}
+      GROQ_ROUTINE_MODEL: ${GROQ_ROUTINE_MODEL:?}
+      GROQ_GUARDRAIL_MODEL: ${GROQ_GUARDRAIL_MODEL:?}
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:?}
+      DATABASE_URL: postgresql://litellm:${LITELLM_DB_PASSWORD:?}@postgres:5432/litellm
+      LITELLM_TELEMETRY: "False"
+      LITELLM_LOCAL_MODEL_COST_MAP: "True"
+    volumes:
+      - ../litellm/entrypoint.py:/app/custodian-entrypoint.py:ro
+      - ../litellm/config.template.yaml:/app/config.template.yaml:ro
+    ports: ["127.0.0.1:14000:4000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      infisical: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=5)"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+    deploy:
+      resources:
+        limits: { memory: 1g }
+
+  mlflow:
+    build: ../mlflow
+    image: custodian/mlflow:local
+    restart: unless-stopped
+    command:
+      - mlflow
+      - server
+      - --host=0.0.0.0
+      - --port=5000
+      - --backend-store-uri=postgresql://mlflow:${MLFLOW_DB_PASSWORD:?}@postgres:5432/mlflow
+      - --artifacts-destination=/mlartifacts
+      - --serve-artifacts
+      - --allowed-hosts=mlflow,mlflow:5000,localhost,localhost:15000,127.0.0.1,127.0.0.1:15000
+      - --workers=1
+    environment:
+      # Server-side GenAI job execution is unused here and spawns extra worker processes.
+      MLFLOW_SERVER_ENABLE_JOB_EXECUTION: "false"
+    volumes: [mlflow-artifacts:/mlartifacts]
+    ports: ["127.0.0.1:15000:5000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=5)"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
+    deploy:
+      resources:
+        limits: { memory: 1g }
+
+  # One-shot promotion gate: python -m eval.promote (see docs/scenarios).
+  prompt-eval:
+    build:
+      context: ../../custodian-backend
+      dockerfile: Dockerfile.eval
+    image: custodian/prompt-eval:local
+    profiles: ["jobs"]
+    restart: "no"
+    environment:
+      LITELLM_URL: http://litellm:4000
+      LITELLM_KEY: ${LITELLM_KEY_EVAL:-}
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      CUSTODIAN_DB_URL: postgresql://custodian:${CUSTODIAN_DB_PASSWORD:?}@postgres:5432/custodian
+      EVAL_ACCURACY_THRESHOLD: ${EVAL_ACCURACY_THRESHOLD:-0.80}
+      EVAL_SAMPLE_SROIE: ${EVAL_SAMPLE_SROIE:-40}
+      EVAL_SAMPLE_CORD: ${EVAL_SAMPLE_CORD:-20}
+    depends_on:
+      litellm: { condition: service_healthy }
+      mlflow: { condition: service_healthy }
+
+volumes:
+  mlflow-artifacts:

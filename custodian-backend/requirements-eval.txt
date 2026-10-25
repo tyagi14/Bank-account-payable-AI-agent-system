@@ -1,0 +1,10 @@
+pydantic==2.14.1
+httpx==0.28.1
+psycopg[binary]==3.3.6
+instructor==1.17.0
+openai==3.3.0
+mlflow-skinny==3.17.2
+deepeval==4.3.1
+opentelemetry-api==1.45.1
+opentelemetry-sdk==1.45.1
+opentelemetry-exporter-otlp-proto-http==1.45.1

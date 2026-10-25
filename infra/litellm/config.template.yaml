@@ -1,0 +1,29 @@
+# Rendered at container start by entrypoint.py (model IDs from env, provider keys from Infisical).
+model_list:
+  - model_name: custodian-reasoning
+    litellm_params:
+      model: openai/${OPENAI_REASONING_MODEL}
+      api_key: os.environ/OPENAI_API_KEY
+      timeout: 120
+  - model_name: custodian-routine
+    litellm_params:
+      model: groq/${GROQ_ROUTINE_MODEL}
+      api_key: os.environ/GROQ_API_KEY
+      timeout: 60
+  - model_name: custodian-guardrail
+    litellm_params:
+      model: groq/${GROQ_GUARDRAIL_MODEL}
+      api_key: os.environ/GROQ_API_KEY
+      timeout: 60
+
+litellm_settings:
+  drop_params: true
+  num_retries: 2
+  # The safeguard model is a Groq preview model; if it is unavailable, the same policy prompt runs on
+  # the routine Groq model. No cross-provider fallback: the critic relies on providers staying distinct.
+  fallbacks:
+    - custodian-guardrail: ["custodian-routine"]
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL

@@ -1,0 +1,1 @@
+Read this receipt and return the vendor, the date and the total amount.

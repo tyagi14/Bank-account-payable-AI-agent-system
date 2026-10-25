@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+
+scrape_configs:
+  - job_name: policy-service
+    static_configs: [{targets: ["policy-service:8000"]}]
+  - job_name: control-plane
+    static_configs: [{targets: ["custodian-control-plane:8000"]}]
+  - job_name: audit-log
+    static_configs: [{targets: ["custodian-audit-log:8000"]}]
+  - job_name: ledger
+    static_configs: [{targets: ["custodian-ledger:8000"]}]
+  - job_name: sandbox-runner
+    static_configs: [{targets: ["custodian-sandbox-runner:8000"]}]

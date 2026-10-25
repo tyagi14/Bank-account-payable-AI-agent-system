@@ -1,0 +1,15 @@
+{
+  "name": "custodian-console",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 13000",
+    "build": "next build",
+    "start": "next start -p 3000"
+  },
+  "dependencies": {
+    "keycloak-js": "26.2.4",
+    "next": "16.4.3",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  }
+}

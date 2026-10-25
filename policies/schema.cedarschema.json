@@ -1,0 +1,43 @@
+{
+  "Custodian": {
+    "entityTypes": {
+      "Agent": {
+        "shape": {"type": "Record", "attributes": {
+          "trustTier": {"type": "String"},
+          "clearance": {"type": "Long"}
+        }}
+      },
+      "Human": {
+        "shape": {"type": "Record", "attributes": {"role": {"type": "String"}}}
+      },
+      "Invoice": {},
+      "Tool": {},
+      "DataAsset": {
+        "shape": {"type": "Record", "attributes": {"classification": {"type": "Long"}}}
+      }
+    },
+    "actions": {
+      "ExtractInvoice": {"appliesTo": {"principalTypes": ["Agent"], "resourceTypes": ["Invoice"], "context": {"type": "Record", "attributes": {}}}},
+      "ScoreRisk": {"appliesTo": {"principalTypes": ["Agent"], "resourceTypes": ["Invoice"], "context": {"type": "Record", "attributes": {}}}},
+      "RunSandboxOCR": {"appliesTo": {"principalTypes": ["Agent"], "resourceTypes": ["Tool"], "context": {"type": "Record", "attributes": {}}}},
+      "ReadData": {"appliesTo": {"principalTypes": ["Agent"], "resourceTypes": ["DataAsset"], "context": {"type": "Record", "attributes": {}}}},
+      "AutoApproveInvoice": {"appliesTo": {"principalTypes": ["Agent"], "resourceTypes": ["Invoice"], "context": {"type": "Record", "attributes": {
+        "amountCents": {"type": "Long"},
+        "vendor": {"type": "String"},
+        "vendorKnown": {"type": "Boolean"},
+        "riskScoreBp": {"type": "Long"},
+        "decisionConfidenceBp": {"type": "Long"}
+      }}}},
+      "HumanApproveInvoice": {"appliesTo": {"principalTypes": ["Human"], "resourceTypes": ["Invoice"], "context": {"type": "Record", "attributes": {
+        "amountCents": {"type": "Long"},
+        "vendor": {"type": "String"},
+        "vendorKnown": {"type": "Boolean"}
+      }}}},
+      "ExecutePayment": {"appliesTo": {"principalTypes": ["Agent"], "resourceTypes": ["Invoice"], "context": {"type": "Record", "attributes": {
+        "amountCents": {"type": "Long"},
+        "vendor": {"type": "String"},
+        "approvalRoute": {"type": "String"}
+      }}}}
+    }
+  }
+}

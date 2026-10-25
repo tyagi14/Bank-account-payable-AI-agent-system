@@ -1,0 +1,10 @@
+.env
+node_modules/
+.next/
+__pycache__/
+*.pyc
+.venv/
+.DS_Store
+docs/sample-invoices/out/
+infra/keycloak/import/
+infra/spire/bootstrap/

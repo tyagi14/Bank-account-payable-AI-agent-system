@@ -1,0 +1,40 @@
+{
+  "realm": "custodian",
+  "enabled": true,
+  "sslRequired": "none",
+  "accessTokenLifespan": 900,
+  "roles": {
+    "realm": [
+      {"name": "ap_clerk", "description": "Approves invoices up to $10,000"},
+      {"name": "finance_controller", "description": "Approves invoices up to $100,000"},
+      {"name": "cfo", "description": "Approves any amount, including high-value overrides"}
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "custodian-console",
+      "name": "Custodian Console",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["http://localhost:13000/*"],
+      "webOrigins": ["http://localhost:13000"],
+      "attributes": {"pkce.code.challenge.method": "S256", "post.logout.redirect.uris": "http://localhost:13000/*"}
+    },
+    {
+      "clientId": "custodian-cli",
+      "name": "Custodian CLI (scenario scripts, local only)",
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true
+    }
+  ],
+  "users": [
+    {"username": "clerk", "email": "clerk@custodian.local", "firstName": "Alex", "lastName": "Clerk", "emailVerified": true, "enabled": true,
+     "credentials": [{"type": "password", "value": "${KC_CLERK_PASSWORD}", "temporary": false}], "realmRoles": ["ap_clerk"]},
+    {"username": "controller", "email": "controller@custodian.local", "firstName": "Sam", "lastName": "Controller", "emailVerified": true, "enabled": true,
+     "credentials": [{"type": "password", "value": "${KC_CONTROLLER_PASSWORD}", "temporary": false}], "realmRoles": ["finance_controller"]},
+    {"username": "cfo", "email": "cfo@custodian.local", "firstName": "Jordan", "lastName": "Cfo", "emailVerified": true, "enabled": true,
+     "credentials": [{"type": "password", "value": "${KC_CFO_PASSWORD}", "temporary": false}], "realmRoles": ["cfo"]}
+  ]
+}

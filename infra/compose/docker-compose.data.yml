@@ -1,0 +1,95 @@
+# Data governance: the catalog (OpenMetadata) and the one-time, re-runnable real-data loader.
+name: custodian
+include:
+  - docker-compose.base.yml
+
+x-openmetadata-env: &openmetadata-env
+  OPENMETADATA_CLUSTER_NAME: custodian
+  SERVER_PORT: "8585"
+  SERVER_ADMIN_PORT: "8586"
+  LOG_LEVEL: WARN
+  AUTHENTICATION_PROVIDER: basic
+  AUTHORIZER_CLASS_NAME: org.openmetadata.service.security.DefaultAuthorizer
+  AUTHORIZER_ADMIN_PRINCIPALS: "[admin]"
+  AUTHORIZER_PRINCIPAL_DOMAIN: open-metadata.org
+  SERVER_HOST_API_URL: http://openmetadata:8585/api
+  DB_DRIVER_CLASS: org.postgresql.Driver
+  DB_SCHEME: postgresql
+  DB_PARAMS: sslmode=disable
+  DB_USER: openmetadata_user
+  DB_USER_PASSWORD: ${OPENMETADATA_DB_PASSWORD:?}
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  OM_DATABASE: openmetadata_db
+  SEARCH_TYPE: elasticsearch
+  ELASTICSEARCH_HOST: elasticsearch
+  ELASTICSEARCH_PORT: "9200"
+  ELASTICSEARCH_SCHEME: http
+  PIPELINE_SERVICE_CLIENT_ENABLED: "false"
+  OPENMETADATA_HEAP_OPTS: "-Xmx768m -Xms256m"
+
+services:
+  elasticsearch:
+    image: elasticsearch:9.3.8
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+      xpack.security.enabled: "false"
+    volumes: [es-data:/usr/share/elasticsearch/data]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+    deploy:
+      resources:
+        limits: { memory: 1536m }
+
+  openmetadata-migrate:
+    image: openmetadata/server:2.0.6
+    restart: "no"
+    command: ["./bootstrap/openmetadata-ops.sh", "migrate"]
+    environment: *openmetadata-env
+    depends_on:
+      postgres: { condition: service_healthy }
+      elasticsearch: { condition: service_healthy }
+
+  openmetadata:
+    image: openmetadata/server:2.0.6
+    restart: unless-stopped
+    environment: *openmetadata-env
+    ports: ["127.0.0.1:18585:8585"]
+    depends_on:
+      openmetadata-migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8586/healthcheck"]
+      interval: 15s
+      timeout: 10s
+      retries: 30
+      start_period: 60s
+    deploy:
+      resources:
+        limits: { memory: 1280m }
+
+  custodian-data-loader:
+    build: ../../custodian-data-loader
+    image: custodian/data-loader:local
+    profiles: ["jobs"]
+    restart: "no"
+    environment:
+      CUSTODIAN_DB_URL: postgresql://custodian:${CUSTODIAN_DB_PASSWORD:?}@postgres:5432/custodian
+      LEDGER_DB_URL: postgresql://ledger:${LEDGER_DB_PASSWORD:?}@postgres:5432/ledger
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?}
+      OPENING_CASH_CENTS: ${OPENING_CASH_CENTS:?}
+    volumes:
+      - ../../custodian-ledger/schema.sql:/srv/ledger-schema.sql:ro
+      - hf-cache:/cache
+    depends_on:
+      postgres: { condition: service_healthy }
+      minio-init: { condition: service_completed_successfully }
+
+volumes:
+  es-data:
+  hf-cache:

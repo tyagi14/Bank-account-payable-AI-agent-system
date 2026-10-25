@@ -1,0 +1,166 @@
+# Agent runtime governance + the application services.
+name: custodian
+include:
+  - docker-compose.model.yml
+
+x-python-service: &python-service
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+  read_only: true
+  tmpfs: ["/tmp"]
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: ["ALL"]
+
+services:
+  custodian-ledger:
+    <<: *python-service
+    build: ../../custodian-ledger
+    image: custodian/ledger:local
+    environment:
+      LEDGER_DB_URL: postgresql://ledger:${LEDGER_DB_PASSWORD:?}@postgres:5432/ledger
+      INFISICAL_URL: http://infisical:8080
+      INFISICAL_CLIENT_ID: ${LEDGER_SERVICE_CLIENT_ID:?run provision-infisical-identities.py}
+      INFISICAL_CLIENT_SECRET: ${LEDGER_SERVICE_CLIENT_SECRET:?run provision-infisical-identities.py}
+      INFISICAL_PROJECT_LEDGER_WRITE: ${INFISICAL_PROJECT_LEDGER_WRITE:?}
+      INFISICAL_PROJECT_VENDOR_LOOKUP: ${INFISICAL_PROJECT_VENDOR_LOOKUP:?}
+    ports: ["127.0.0.1:18010:8000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      infisical: { condition: service_healthy }
+    deploy:
+      resources:
+        limits: { memory: 256m, cpus: "1.0" }
+
+  custodian-audit-log:
+    <<: *python-service
+    build: ../../custodian-audit-log
+    image: custodian/audit-log:local
+    environment:
+      AUDIT_DB_URL: postgresql://audit:${AUDIT_DB_PASSWORD:?}@postgres:5432/audit
+      AUDIT_MINIO_USER: audit-writer
+      AUDIT_MINIO_PASSWORD: ${AUDIT_MINIO_PASSWORD:?}
+      AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-1}
+      AUDIT_WATCHDOG_INTERVAL_SECONDS: ${AUDIT_WATCHDOG_INTERVAL_SECONDS:-30}
+    depends_on:
+      postgres: { condition: service_healthy }
+      minio-init: { condition: service_completed_successfully }
+    deploy:
+      resources:
+        limits: { memory: 256m, cpus: "1.0" }
+
+  custodian-control-plane:
+    <<: *python-service
+    build: ../../custodian-control-plane
+    image: custodian/control-plane:local
+    environment:
+      CUSTODIAN_DB_URL: postgresql://custodian:${CUSTODIAN_DB_PASSWORD:?}@postgres:5432/custodian
+      AUDIT_LOG_URL: http://custodian-audit-log:8000
+      KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/custodian/protocol/openid-connect/certs
+      KEYCLOAK_ISSUER: http://localhost:18081/realms/custodian
+      CANARY_VENDORS: ${CANARY_VENDORS:-}
+      DENIAL_TRIP_COUNT: ${DENIAL_TRIP_COUNT:-5}
+      DENIAL_TRIP_WINDOW_SECONDS: ${DENIAL_TRIP_WINDOW_SECONDS:-600}
+      HEARTBEAT_STALE_SECONDS: ${HEARTBEAT_STALE_SECONDS:-180}
+    ports: ["127.0.0.1:18011:8000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      custodian-audit-log: { condition: service_healthy }
+    deploy:
+      resources:
+        limits: { memory: 256m, cpus: "1.0" }
+
+  policy-service:
+    <<: *python-service
+    build: ../policy-service
+    image: custodian/policy-service:local
+    environment:
+      CUSTODIAN_DB_URL: postgresql://custodian:${CUSTODIAN_DB_PASSWORD:?}@postgres:5432/custodian
+      CONTROL_PLANE_URL: http://custodian-control-plane:8000
+      AUDIT_LOG_URL: http://custodian-audit-log:8000
+      POLICY_DIR: /policies
+    volumes:
+      - ../../policies:/policies:ro
+    depends_on:
+      postgres: { condition: service_healthy }
+      custodian-control-plane: { condition: service_healthy }
+      custodian-audit-log: { condition: service_healthy }
+    deploy:
+      resources:
+        limits: { memory: 256m, cpus: "1.0" }
+
+  custodian-sandbox-runner:
+    build: ../../custodian-sandbox-runner
+    image: custodian/sandbox-runner:local
+    restart: unless-stopped
+    read_only: true
+    tmpfs: ["/tmp"]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    environment:
+      SANDBOX_IMAGE: custodian/sandbox-ocr:local
+      SANDBOX_TIMEOUT_SECONDS: "60"
+    volumes:
+      # Launching sibling containers needs the Docker socket; this and spire-agent are the only holders.
+      - /var/run/docker.sock:/var/run/docker.sock
+    deploy:
+      resources:
+        limits: { memory: 192m, cpus: "1.0" }
+
+  custodian-backend:
+    <<: *python-service
+    build: ../../custodian-backend
+    image: custodian/backend:local
+    tmpfs: ["/tmp", "/home/app"]
+    environment:
+      CUSTODIAN_DB_URL: postgresql://custodian:${CUSTODIAN_DB_PASSWORD:?}@postgres:5432/custodian
+      SPIFFE_ENDPOINT_SOCKET: unix:///run/spire/sockets/agent.sock
+      SPIFFE_EXPECTED_ID: spiffe://${SPIRE_TRUST_DOMAIN:-custodian.local}/service/custodian-backend
+      LITELLM_URL: http://litellm:4000
+      LITELLM_KEY_EXTRACTION: ${LITELLM_KEY_EXTRACTION:-}
+      LITELLM_KEY_RISK: ${LITELLM_KEY_RISK:-}
+      LITELLM_KEY_APPROVAL: ${LITELLM_KEY_APPROVAL:-}
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_DISABLE_AGENT_HINT: "1"
+      INFISICAL_URL: http://infisical:8080
+      PAYMENT_EXEC_CLIENT_ID: ${PAYMENT_EXEC_CLIENT_ID:?}
+      PAYMENT_EXEC_CLIENT_SECRET: ${PAYMENT_EXEC_CLIENT_SECRET:?}
+      VENDOR_LOOKUP_CLIENT_ID: ${VENDOR_LOOKUP_CLIENT_ID:?}
+      VENDOR_LOOKUP_CLIENT_SECRET: ${VENDOR_LOOKUP_CLIENT_SECRET:?}
+      INFISICAL_PROJECT_LEDGER_WRITE: ${INFISICAL_PROJECT_LEDGER_WRITE:?}
+      INFISICAL_PROJECT_VENDOR_LOOKUP: ${INFISICAL_PROJECT_VENDOR_LOOKUP:?}
+      LANGFUSE_URL: http://langfuse-web:3000
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      ROUTINE_AMOUNT_CENTS: ${ROUTINE_AMOUNT_CENTS:-100000}
+      DECISION_CONFIDENCE_MIN: ${DECISION_CONFIDENCE_MIN:-0.75}
+      SETTLEMENT_HOLD_SECONDS: ${SETTLEMENT_HOLD_SECONDS:-20}
+      CORS_ORIGINS: http://localhost:13000
+    volumes:
+      - spire-sockets:/run/spire/sockets:ro
+    ports: ["127.0.0.1:18000:8000"]
+    depends_on:
+      spire-agent: { condition: service_healthy }
+      policy-service: { condition: service_healthy }
+      custodian-ledger: { condition: service_healthy }
+      custodian-sandbox-runner: { condition: service_healthy }
+      mlflow: { condition: service_healthy }
+    deploy:
+      resources:
+        limits: { memory: 1g, cpus: "2.0" }
+
+  custodian-console:
+    build: ../../custodian-console
+    image: custodian/console:local
+    restart: unless-stopped
+    read_only: true
+    tmpfs: ["/tmp"]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    ports: ["127.0.0.1:13000:3000"]
+    depends_on:
+      custodian-backend: { condition: service_healthy }
+    deploy:
+      resources:
+        limits: { memory: 256m, cpus: "1.0" }

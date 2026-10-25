@@ -1,0 +1,7 @@
+datasets==5.1.0
+pillow==13.0.0
+minio==7.2.20
+psycopg[binary]==3.3.6
+httpx==0.28.1
+great-expectations==1.24.1
+pandas==3.1.0

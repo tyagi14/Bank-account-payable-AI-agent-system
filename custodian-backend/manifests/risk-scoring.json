@@ -1,0 +1,1 @@
+{"agent": "risk-scoring", "trustTier": "internal", "allowedActions": ["ScoreRisk", "ReadData", "vendor.lookup"]}
